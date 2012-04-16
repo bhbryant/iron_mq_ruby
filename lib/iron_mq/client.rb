@@ -1,6 +1,6 @@
 require 'json'
 require 'logger'
-require 'rest'
+require 'faraday'
 
 module IronMQ
 
@@ -22,7 +22,7 @@ module IronMQ
 
       @base_url = "#{@scheme}://#{@host}:#{@port}/1"
 
-      @rest = Rest::Client.new
+      @rest = Faraday.new #Rest::Client.new
 
     end
 
@@ -56,28 +56,33 @@ module IronMQ
     def get(path, params={})
       url = full_url(path)
       @logger.debug 'url=' + url
-      req_hash = common_req_hash
-      req_hash[:params] = params if params
-      @logger.debug 'req_hash=' + req_hash.inspect
-      response = @rest.get(url, req_hash)
+      response = @rest.get do |req|
+        req.url url
+        req.headers = common_req_hash[:headers]
+        req.params = params
+      end
+      
       @logger.debug 'GET response=' + response.inspect
       res = check_response(response)
-      return res, response.code
+      return res, response.status
     end
 
     def post(path, params={})
       url = full_url(path)
       @logger.debug 'url=' + url
       #response = @http_sess.post(path + "?oauth=#{@token}", {'oauth' => @token}.merge(params).to_json, {"Content-Type" => 'application/json'})
-      req_hash = common_req_hash
-      req_hash[:body] = params.to_json
-      response = @rest.post(url, req_hash)
+
+      response = @rest.post do |req|
+        req.url url
+        req.headers = common_req_hash[:headers]
+        req.body = params.to_json
+      end
       @logger.debug 'POST response=' + response.inspect
       res = check_response(response)
       #@logger.debug 'response: ' + res.inspect
       #body = response.body
       #res = JSON.parse(body)
-      return res, response.code
+      return res, response.status
     end
 
 
@@ -86,12 +91,17 @@ module IronMQ
       @logger.debug 'url=' + url
       req_hash = common_req_hash
       req_hash[:params] = params
-      response = @rest.delete(url, req_hash)
+      response = @rest.delete do |req|
+        req.url url
+        req.headers = common_req_hash[:headers]
+        req.params = params
+      end
+      
       res = check_response(response)
       #body = response.body
       #res = JSON.parse(body)
       #@logger.debug 'response: ' + res.inspect
-      return res, response.code
+      return res, response.status
     end
 
     def check_response(response)
@@ -100,7 +110,7 @@ module IronMQ
       #response.headers # the http headers
       #response.headers_hash # http headers put into a hash
       #response.body    # the response body
-      status = response.code
+      status = response.status
       body = response.body
       # todo: check content-type == application/json before parsing
       @logger.debug "response code=" + status.to_s
